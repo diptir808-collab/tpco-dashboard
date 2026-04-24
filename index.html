@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TPCODL Interruption Dashboard – with Natural Calamities</title>
+    <title>TPCODL Interruption Dashboard – Auto Load</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <style>
@@ -175,19 +175,25 @@
             border-radius: 30px;
             display: inline-block;
         }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            font-size: 1.2rem;
+            color: #2c7da0;
+        }
     </style>
 </head>
 <body>
 <div class="container">
     <h1>⚡ TPCODL Power Interruption Dashboard</h1>
-    <div class="sub">SAIDI / SAIFI – Operational vs Natural Calamities (FY26)</div>
+    <div class="sub">SAIDI / SAIFI – Operational vs Natural Calamities (FY26) – Auto‑loaded from repository</div>
 
-    <div class="upload-area">
+    <!-- Hidden upload area (no longer needed) -->
+    <div class="upload-area" style="display: none;">
         <label class="file-label" for="csvUpload">📂 Upload CSV file</label>
         <input type="file" id="csvUpload" accept=".csv">
         <p style="margin-top: 14px; font-size: 0.85rem; color: #475569;">
-            Select <strong>INTERRUPTION & LOADING DATA - TPCODL INDICES-FY26.csv</strong><br>
-            Parses monthly SAIDI/SAIFI per circle + natural calamities contribution.
+            The data file is now loaded automatically. No upload required.
         </p>
     </div>
 
@@ -201,7 +207,7 @@
                 <input type="checkbox" id="showCalamitiesCheckbox">
                 <label for="showCalamitiesCheckbox">🌀 Show Natural Calamities contribution</label>
             </div>
-            <div class="badge" id="dataStatus">✓ Data ready</div>
+            <div class="badge" id="dataStatus">⏳ Loading data...</div>
         </div>
     </div>
 
@@ -228,18 +234,23 @@
             </div>
         </div>
     </div>
-    <footer>Data parsed from TPCODL FY26 report. Operational excludes exceptional events; calamities are from Category‑3 (cyclone, Kalbaishakhi, force majeure).</footer>
+    <footer>Data automatically loaded from the repository. Operational excludes exceptional events; calamities are from Category‑3 (cyclone, Kalbaishakhi, force majeure).</footer>
 </div>
 
 <script>
-    // Data structures
-    let operationalData = [];      // { circle, month, saidi, saifi }
-    let calamityData = [];         // { circle, month, saidi, saifi }
+    // ============================================================
+    // 🔧 CONFIGURATION – CHANGE ONLY THIS LINE
+    // Set the path to your CSV file (must be uploaded to the same GitHub repo)
+    const DATA_FILE_PATH = './your-file.csv';   // <-- RENAME THIS to your actual CSV filename
+    // ============================================================
+
+    let operationalData = [];
+    let calamityData = [];
     let monthlyOrder = ["APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPT", "OCTOBER", "NOVEMBER", "DECEMBER", "JANUARY", "FEBRUARY", "MARCH"];
     let saidiChart, saifiChart;
     let currentCircle = "";
 
-    // Helper: find column indices of months
+    // ---------- Helper functions: find monthly columns ----------
     function findMonthlyColumns(headers, startCol) {
         const monthCols = [];
         for (let m = 0; m < monthlyOrder.length; m++) {
@@ -266,16 +277,12 @@
         if (monthCols.length === 0) throw new Error("No monthly columns found for operational data");
         
         const data = [];
-        // Start from row after header
         for (let i = headerRowIdx + 1; i < rows.length; i++) {
             const row = rows[i];
             if (!row || row.length < 2) continue;
             let circleName = (row[1] && row[1].toString().trim()) || "";
-            // skip category headers, empty, summary rows
             if (!circleName || circleName === "" || circleName.startsWith("Category") || circleName === "0" || circleName === "33KV" || circleName === "11KV") continue;
-            if (circleName === "NATURAL CALAMITIES") break; // stop before calamities section
-            
-            // Avoid duplicates if same circle appears later (unlikely but safe)
+            if (circleName === "NATURAL CALAMITIES") break;
             if (data.some(d => d.circle === circleName)) continue;
             
             for (let mc of monthCols) {
@@ -296,7 +303,6 @@
 
     // Parse natural calamities data (33kV + 11kV rows)
     function parseCalamityData(rows, startRowIdx, monthStartCol) {
-        // First, locate the row with "NATURAL CALAMITIES" as first cell
         let calamitiesHeaderRow = -1;
         for (let i = startRowIdx; i < rows.length; i++) {
             let firstCell = rows[i][0] ? rows[i][0].toString().trim() : "";
@@ -307,47 +313,31 @@
         }
         if (calamitiesHeaderRow === -1) return [];
         
-        // Now find the month columns in this section. The header row for months is the same pattern.
-        // The row right after "NATURAL CALAMITIES" contains "33KV" then numbers? Actually months start later.
-        // Better: use the same monthStartCol from main header – months are aligned.
-        // We'll scan rows after calamitiesHeaderRow, skip the "33KV" and "11KV" lines.
-        const data = [];
-        // collect both 33kV and 11kV lines, sum per circle
-        const tempMap = new Map(); // key: circle+month, value: { saidi, saifi }
+        // Ensure we have month columns globally
+        if (!window.monthColsGlobal) {
+            for (let j = 0; j < rows.length; j++) {
+                for (let c = 0; c < rows[j].length; c++) {
+                    if (rows[j][c] && rows[j][c].toString().trim().toUpperCase() === "APRIL") {
+                        window.monthColsGlobal = findMonthlyColumns(rows[j], c);
+                        break;
+                    }
+                }
+                if (window.monthColsGlobal) break;
+            }
+        }
+        const monthCols = window.monthColsGlobal;
+        if (!monthCols) return [];
         
+        const tempMap = new Map();
         for (let i = calamitiesHeaderRow + 1; i < rows.length; i++) {
             const row = rows[i];
             if (!row || row.length < 2) continue;
             let firstCol = (row[0] || "").toString().trim();
             if (firstCol === "33KV" || firstCol === "11KV") continue;
-            if (firstCol === "" || firstCol.startsWith("Category")) break; // end of calamities section
+            if (firstCol === "" || firstCol.startsWith("Category")) break;
             
             let circleName = (row[1] && row[1].toString().trim()) || "";
             if (!circleName || circleName === "") continue;
-            
-            // get monthly values using same monthStartCol pattern
-            // We need the month columns for this row – assume they start at the same column index as before
-            // Actually the row might have month values from column monthStartCol onwards.
-            // We'll reuse the month indices from the main header (found earlier). For safety, recompute using current row as header? But row doesn't have month names.
-            // Instead, we can scan this row: months are in same positions as the operational header.
-            // We'll use a fixed assumption: columns 2+ are months? Not reliable. Better to re-detect from a known month row.
-            // Simpler: we already have monthCols from operational header; use those indices.
-            // But we need to recompute monthCols because the row might not have the same starting col. We'll assume the month names row is above. Let's find a row with APRIL.
-            // Actually easier: we can store the month column indices from the main header globally.
-            if (!window.monthColsGlobal) {
-                // fallback: detect from current section by finding APRIL in first few rows
-                for (let j = 0; j < rows.length; j++) {
-                    for (let c = 0; c < rows[j].length; c++) {
-                        if (rows[j][c] && rows[j][c].toString().trim().toUpperCase() === "APRIL") {
-                            window.monthColsGlobal = findMonthlyColumns(rows[j], c);
-                            break;
-                        }
-                    }
-                    if (window.monthColsGlobal) break;
-                }
-            }
-            const monthCols = window.monthColsGlobal;
-            if (!monthCols) continue;
             
             for (let mc of monthCols) {
                 let saidi = parseFloat(row[mc.saidiCol]);
@@ -363,20 +353,15 @@
                 entry.saifi += saifi;
             }
         }
-        
-        for (let entry of tempMap.values()) {
-            data.push(entry);
-        }
-        return data;
+        return Array.from(tempMap.values());
     }
 
-    // Main parsing
+    // Full CSV parsing function
     function parseFullCSV(csvText) {
         const result = Papa.parse(csvText, { header: false, skipEmptyLines: true });
         const rows = result.data;
         if (!rows || rows.length < 10) throw new Error("CSV too short");
         
-        // Locate header row with "APRIL"
         let headerRowIdx = -1;
         let monthStartCol = -1;
         for (let i = 0; i < Math.min(rows.length, 20); i++) {
@@ -392,29 +377,15 @@
         }
         if (headerRowIdx === -1) throw new Error("Could not find APRIL column header");
         
-        // Store global month columns for later calamities parsing
         const headerRow = rows[headerRowIdx];
         window.monthColsGlobal = findMonthlyColumns(headerRow, monthStartCol);
         
-        // Parse operational data (stops when "NATURAL CALAMITIES" appears)
-        let operational = [];
-        for (let i = headerRowIdx + 1; i < rows.length; i++) {
-            const row = rows[i];
-            if (!row || row.length < 2) continue;
-            let firstCol = (row[0] || "").toString().trim();
-            if (firstCol === "NATURAL CALAMITIES") break;
-            // parse as operational? Actually we have a dedicated function but we'll integrate directly to avoid double scan
-        }
-        // Use the dedicated parser that stops at NATURAL CALAMITIES
-        operational = parseOperationalData(rows, headerRowIdx, monthStartCol);
-        
-        // Parse calamities (starting after the operational section)
-        let calamities = parseCalamityData(rows, headerRowIdx, monthStartCol);
-        
+        const operational = parseOperationalData(rows, headerRowIdx, monthStartCol);
+        const calamities = parseCalamityData(rows, headerRowIdx, monthStartCol);
         return { operational, calamities };
     }
-    
-    // Update charts and table
+
+    // ---------- Dashboard update functions ----------
     function updateDashboard() {
         const circle = document.getElementById("circleSelect").value;
         if (!circle) return;
@@ -430,11 +401,9 @@
         const calSaidi = months.map(m => { let f = calFiltered.find(ca => ca.month === m); return f ? f.saidi : 0; });
         const calSaifi = months.map(m => { let f = calFiltered.find(ca => ca.month === m); return f ? f.saifi : 0; });
         
-        // Destroy old charts
         if (saidiChart) saidiChart.destroy();
         if (saifiChart) saifiChart.destroy();
         
-        // SAIDI chart (line)
         const ctxSaidi = document.getElementById('saidiChart').getContext('2d');
         const saidiDatasets = [{
             label: `Operational SAIDI (min) – ${circle}`,
@@ -465,7 +434,6 @@
             options: { responsive: true, maintainAspectRatio: true }
         });
         
-        // SAIFI chart (bar)
         const ctxSaifi = document.getElementById('saifiChart').getContext('2d');
         const saifiDatasets = [{
             label: `Operational SAIFI (freq) – ${circle}`,
@@ -487,7 +455,6 @@
             options: { responsive: true, maintainAspectRatio: true }
         });
         
-        // Update table
         const tbody = document.querySelector("#dataTable tbody");
         tbody.innerHTML = "";
         for (let i = 0; i < months.length; i++) {
@@ -506,10 +473,9 @@
             `;
             tbody.appendChild(tr);
         }
-        document.getElementById("dataStatus").innerHTML = `✓ ${circle} | ${showCalamities ? "with calamities" : "operational only"}`;
+        document.getElementById("dataStatus").innerHTML = `✅ ${circle} | ${showCalamities ? "with calamities" : "operational only"}`;
     }
     
-    // Populate circle dropdown
     function populateCircles() {
         const circles = [...new Set(operationalData.map(d => d.circle))].sort();
         const select = document.getElementById("circleSelect");
@@ -528,27 +494,36 @@
         document.getElementById("showCalamitiesCheckbox").addEventListener("change", updateDashboard);
     }
     
-    // File upload handler
-    document.getElementById("csvUpload").addEventListener("change", function(e) {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = function(evt) {
-            try {
-                const { operational, calamities } = parseFullCSV(evt.target.result);
+    // ---------- Auto‑load CSV from repository ----------
+    function loadDataFromFile(filePath) {
+        console.log(`Fetching CSV from: ${filePath}`);
+        fetch(filePath)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: File not found at ${filePath}`);
+                }
+                return response.text();
+            })
+            .then(csvText => {
+                const { operational, calamities } = parseFullCSV(csvText);
                 if (operational.length === 0) throw new Error("No operational data found");
                 operationalData = operational;
                 calamityData = calamities;
-                
                 document.getElementById("filtersPanel").style.display = "block";
                 document.getElementById("dashboardContent").style.display = "block";
                 populateCircles();
-            } catch (err) {
-                alert("Parsing error: " + err.message + "\n\nMake sure you uploaded the correct TPCODL CSV file.");
-                console.error(err);
-            }
-        };
-        reader.readAsText(file, "UTF-8");
+                document.getElementById("dataStatus").innerHTML = "✅ Data loaded automatically!";
+            })
+            .catch(error => {
+                console.error("Load error:", error);
+                document.getElementById("dataStatus").innerHTML = "❌ Failed to load CSV. Check file path & name.";
+                alert(`Could not load data from ${filePath}\n\nMake sure:\n1. The CSV file is uploaded to the same GitHub repo as index.html\n2. The filename in DATA_FILE_PATH is correct (case-sensitive)\n3. Wait 1 minute after upload for GitHub Pages to update`);
+            });
+    }
+    
+    // Start loading when page loads
+    window.addEventListener('load', () => {
+        loadDataFromFile(DATA_FILE_PATH);
     });
 </script>
 </body>
