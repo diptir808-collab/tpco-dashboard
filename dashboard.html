@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TPCODL Interruption Dashboard – with Natural Calamities</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: system-ui, 'Segoe UI', 'Roboto', sans-serif;
+        }
+        body {
+            background: #f0f4f8;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 28px;
+            box-shadow: 0 12px 24px rgba(0,0,0,0.05);
+            overflow: hidden;
+            padding: 24px 28px;
+        }
+        h1 {
+            font-size: 1.9rem;
+            font-weight: 600;
+            margin-top: 0;
+            margin-bottom: 0.25rem;
+            color: #1e2a3e;
+        }
+        .sub {
+            color: #4a5c6c;
+            border-left: 3px solid #2c7da0;
+            padding-left: 12px;
+            margin-bottom: 28px;
+        }
+        .upload-area {
+            background: #f8fafc;
+            border: 2px dashed #cbd5e1;
+            border-radius: 20px;
+            padding: 24px;
+            text-align: center;
+            margin-bottom: 32px;
+            transition: 0.2s;
+        }
+        .upload-area:hover {
+            background: #f1f5f9;
+            border-color: #2c7da0;
+        }
+        .file-label {
+            background: #2c7da0;
+            color: white;
+            padding: 10px 24px;
+            border-radius: 40px;
+            cursor: pointer;
+            font-weight: 500;
+            display: inline-block;
+            transition: 0.2s;
+            border: none;
+        }
+        .file-label:hover {
+            background: #1f5e7a;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        .filters {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            align-items: flex-end;
+            margin-bottom: 30px;
+            background: #f9f9fb;
+            padding: 18px 20px;
+            border-radius: 24px;
+        }
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .filter-group label {
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: #2c3e4e;
+        }
+        select, .toggle-group {
+            padding: 8px 16px;
+            border-radius: 40px;
+            border: 1px solid #cbd5e1;
+            background: white;
+            font-size: 0.9rem;
+        }
+        .toggle-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+        }
+        .badge {
+            background: #e6f7f0;
+            color: #1f6e43;
+            padding: 4px 12px;
+            border-radius: 30px;
+            font-size: 0.75rem;
+        }
+        .chart-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 24px;
+            margin-bottom: 40px;
+        }
+        .chart-card {
+            flex: 1;
+            min-width: 280px;
+            background: #ffffff;
+            border-radius: 24px;
+            padding: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            border: 1px solid #e9eef3;
+        }
+        .chart-card h3 {
+            margin-top: 0;
+            margin-bottom: 16px;
+            font-size: 1.3rem;
+            font-weight: 500;
+        }
+        canvas {
+            max-height: 320px;
+            width: 100%;
+        }
+        .table-wrapper {
+            overflow-x: auto;
+            border-radius: 20px;
+            border: 1px solid #e2e8f0;
+            background: white;
+            margin-top: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+        th, td {
+            border-bottom: 1px solid #e2e8f0;
+            padding: 12px 12px;
+            text-align: right;
+        }
+        th {
+            background: #f1f5f9;
+            font-weight: 600;
+            color: #1e293b;
+            position: sticky;
+            top: 0;
+            text-align: center;
+        }
+        td:first-child, th:first-child {
+            text-align: left;
+            font-weight: 500;
+        }
+        footer {
+            text-align: center;
+            margin-top: 36px;
+            font-size: 0.8rem;
+            color: #5a6e7c;
+        }
+        .info-note {
+            font-size: 0.75rem;
+            background: #fef9e3;
+            padding: 6px 12px;
+            border-radius: 30px;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>⚡ TPCODL Power Interruption Dashboard</h1>
+    <div class="sub">SAIDI / SAIFI – Operational vs Natural Calamities (FY26)</div>
+
+    <div class="upload-area">
+        <label class="file-label" for="csvUpload">📂 Upload CSV file</label>
+        <input type="file" id="csvUpload" accept=".csv">
+        <p style="margin-top: 14px; font-size: 0.85rem; color: #475569;">
+            Select <strong>INTERRUPTION & LOADING DATA - TPCODL INDICES-FY26.csv</strong><br>
+            Parses monthly SAIDI/SAIFI per circle + natural calamities contribution.
+        </p>
+    </div>
+
+    <div id="filtersPanel" style="display: none;">
+        <div class="filters">
+            <div class="filter-group">
+                <label>🏭 Circle (Division)</label>
+                <select id="circleSelect"></select>
+            </div>
+            <div class="filter-group toggle-group">
+                <input type="checkbox" id="showCalamitiesCheckbox">
+                <label for="showCalamitiesCheckbox">🌀 Show Natural Calamities contribution</label>
+            </div>
+            <div class="badge" id="dataStatus">✓ Data ready</div>
+        </div>
+    </div>
+
+    <div id="dashboardContent" style="display: none;">
+        <div class="chart-row">
+            <div class="chart-card">
+                <h3>📈 SAIDI trend (minutes)</h3>
+                <canvas id="saidiChart" width="400" height="250"></canvas>
+                <div class="info-note">Solid line = Operational (incl. supply & equipment failures). Dashed line = Natural calamities only.</div>
+            </div>
+            <div class="chart-card">
+                <h3>📉 SAIFI trend (frequency)</h3>
+                <canvas id="saifiChart" width="400" height="250"></canvas>
+                <div class="info-note">Light bars = Operational. Dark bars = Natural calamities.</div>
+            </div>
+        </div>
+        <div class="chart-card" style="margin-bottom: 24px;">
+            <h3>📋 Monthly data (operational + calamities)</h3>
+            <div class="table-wrapper">
+                <table id="dataTable">
+                    <thead><tr><th>Month</th><th>SAIDI (op, min)</th><th>SAIFI (op)</th><th>SAIDI (calamity)</th><th>SAIFI (calamity)</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <footer>Data parsed from TPCODL FY26 report. Operational excludes exceptional events; calamities are from Category‑3 (cyclone, Kalbaishakhi, force majeure).</footer>
+</div>
+
+<script>
+    // Data structures
+    let operationalData = [];      // { circle, month, saidi, saifi }
+    let calamityData = [];         // { circle, month, saidi, saifi }
+    let monthlyOrder = ["APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPT", "OCTOBER", "NOVEMBER", "DECEMBER", "JANUARY", "FEBRUARY", "MARCH"];
+    let saidiChart, saifiChart;
+    let currentCircle = "";
+
+    // Helper: find column indices of months
+    function findMonthlyColumns(headers, startCol) {
+        const monthCols = [];
+        for (let m = 0; m < monthlyOrder.length; m++) {
+            const monthName = monthlyOrder[m];
+            let colIdx = -1;
+            for (let j = startCol; j < headers.length; j++) {
+                let cell = headers[j] ? headers[j].toString().trim().toUpperCase() : "";
+                if (cell === monthName) {
+                    colIdx = j;
+                    break;
+                }
+            }
+            if (colIdx !== -1 && colIdx + 1 < headers.length) {
+                monthCols.push({ month: monthName, saidiCol: colIdx, saifiCol: colIdx + 1 });
+            }
+        }
+        return monthCols;
+    }
+
+    // Parse operational data (first part of CSV)
+    function parseOperationalData(rows, headerRowIdx, monthStartCol) {
+        const headerRow = rows[headerRowIdx];
+        const monthCols = findMonthlyColumns(headerRow, monthStartCol);
+        if (monthCols.length === 0) throw new Error("No monthly columns found for operational data");
+        
+        const data = [];
+        // Start from row after header
+        for (let i = headerRowIdx + 1; i < rows.length; i++) {
+            const row = rows[i];
+            if (!row || row.length < 2) continue;
+            let circleName = (row[1] && row[1].toString().trim()) || "";
+            // skip category headers, empty, summary rows
+            if (!circleName || circleName === "" || circleName.startsWith("Category") || circleName === "0" || circleName === "33KV" || circleName === "11KV") continue;
+            if (circleName === "NATURAL CALAMITIES") break; // stop before calamities section
+            
+            // Avoid duplicates if same circle appears later (unlikely but safe)
+            if (data.some(d => d.circle === circleName)) continue;
+            
+            for (let mc of monthCols) {
+                let saidi = parseFloat(row[mc.saidiCol]);
+                let saifi = parseFloat(row[mc.saifiCol]);
+                if (isNaN(saidi)) saidi = 0;
+                if (isNaN(saifi)) saifi = 0;
+                data.push({
+                    circle: circleName,
+                    month: mc.month,
+                    saidi: saidi,
+                    saifi: saifi
+                });
+            }
+        }
+        return data;
+    }
+
+    // Parse natural calamities data (33kV + 11kV rows)
+    function parseCalamityData(rows, startRowIdx, monthStartCol) {
+        // First, locate the row with "NATURAL CALAMITIES" as first cell
+        let calamitiesHeaderRow = -1;
+        for (let i = startRowIdx; i < rows.length; i++) {
+            let firstCell = rows[i][0] ? rows[i][0].toString().trim() : "";
+            if (firstCell === "NATURAL CALAMITIES") {
+                calamitiesHeaderRow = i;
+                break;
+            }
+        }
+        if (calamitiesHeaderRow === -1) return [];
+        
+        // Now find the month columns in this section. The header row for months is the same pattern.
+        // The row right after "NATURAL CALAMITIES" contains "33KV" then numbers? Actually months start later.
+        // Better: use the same monthStartCol from main header – months are aligned.
+        // We'll scan rows after calamitiesHeaderRow, skip the "33KV" and "11KV" lines.
+        const data = [];
+        // collect both 33kV and 11kV lines, sum per circle
+        const tempMap = new Map(); // key: circle+month, value: { saidi, saifi }
+        
+        for (let i = calamitiesHeaderRow + 1; i < rows.length; i++) {
+            const row = rows[i];
+            if (!row || row.length < 2) continue;
+            let firstCol = (row[0] || "").toString().trim();
+            if (firstCol === "33KV" || firstCol === "11KV") continue;
+            if (firstCol === "" || firstCol.startsWith("Category")) break; // end of calamities section
+            
+            let circleName = (row[1] && row[1].toString().trim()) || "";
+            if (!circleName || circleName === "") continue;
+            
+            // get monthly values using same monthStartCol pattern
+            // We need the month columns for this row – assume they start at the same column index as before
+            // Actually the row might have month values from column monthStartCol onwards.
+            // We'll reuse the month indices from the main header (found earlier). For safety, recompute using current row as header? But row doesn't have month names.
+            // Instead, we can scan this row: months are in same positions as the operational header.
+            // We'll use a fixed assumption: columns 2+ are months? Not reliable. Better to re-detect from a known month row.
+            // Simpler: we already have monthCols from operational header; use those indices.
+            // But we need to recompute monthCols because the row might not have the same starting col. We'll assume the month names row is above. Let's find a row with APRIL.
+            // Actually easier: we can store the month column indices from the main header globally.
+            if (!window.monthColsGlobal) {
+                // fallback: detect from current section by finding APRIL in first few rows
+                for (let j = 0; j < rows.length; j++) {
+                    for (let c = 0; c < rows[j].length; c++) {
+                        if (rows[j][c] && rows[j][c].toString().trim().toUpperCase() === "APRIL") {
+                            window.monthColsGlobal = findMonthlyColumns(rows[j], c);
+                            break;
+                        }
+                    }
+                    if (window.monthColsGlobal) break;
+                }
+            }
+            const monthCols = window.monthColsGlobal;
+            if (!monthCols) continue;
+            
+            for (let mc of monthCols) {
+                let saidi = parseFloat(row[mc.saidiCol]);
+                let saifi = parseFloat(row[mc.saifiCol]);
+                if (isNaN(saidi)) saidi = 0;
+                if (isNaN(saifi)) saifi = 0;
+                const key = `${circleName}|${mc.month}`;
+                if (!tempMap.has(key)) {
+                    tempMap.set(key, { circle: circleName, month: mc.month, saidi: 0, saifi: 0 });
+                }
+                let entry = tempMap.get(key);
+                entry.saidi += saidi;
+                entry.saifi += saifi;
+            }
+        }
+        
+        for (let entry of tempMap.values()) {
+            data.push(entry);
+        }
+        return data;
+    }
+
+    // Main parsing
+    function parseFullCSV(csvText) {
+        const result = Papa.parse(csvText, { header: false, skipEmptyLines: true });
+        const rows = result.data;
+        if (!rows || rows.length < 10) throw new Error("CSV too short");
+        
+        // Locate header row with "APRIL"
+        let headerRowIdx = -1;
+        let monthStartCol = -1;
+        for (let i = 0; i < Math.min(rows.length, 20); i++) {
+            const row = rows[i];
+            for (let j = 0; j < row.length; j++) {
+                if (row[j] && row[j].toString().trim().toUpperCase() === "APRIL") {
+                    headerRowIdx = i;
+                    monthStartCol = j;
+                    break;
+                }
+            }
+            if (headerRowIdx !== -1) break;
+        }
+        if (headerRowIdx === -1) throw new Error("Could not find APRIL column header");
+        
+        // Store global month columns for later calamities parsing
+        const headerRow = rows[headerRowIdx];
+        window.monthColsGlobal = findMonthlyColumns(headerRow, monthStartCol);
+        
+        // Parse operational data (stops when "NATURAL CALAMITIES" appears)
+        let operational = [];
+        for (let i = headerRowIdx + 1; i < rows.length; i++) {
+            const row = rows[i];
+            if (!row || row.length < 2) continue;
+            let firstCol = (row[0] || "").toString().trim();
+            if (firstCol === "NATURAL CALAMITIES") break;
+            // parse as operational? Actually we have a dedicated function but we'll integrate directly to avoid double scan
+        }
+        // Use the dedicated parser that stops at NATURAL CALAMITIES
+        operational = parseOperationalData(rows, headerRowIdx, monthStartCol);
+        
+        // Parse calamities (starting after the operational section)
+        let calamities = parseCalamityData(rows, headerRowIdx, monthStartCol);
+        
+        return { operational, calamities };
+    }
+    
+    // Update charts and table
+    function updateDashboard() {
+        const circle = document.getElementById("circleSelect").value;
+        if (!circle) return;
+        currentCircle = circle;
+        const showCalamities = document.getElementById("showCalamitiesCheckbox").checked;
+        
+        const opFiltered = operationalData.filter(d => d.circle === circle).sort((a,b) => monthlyOrder.indexOf(a.month) - monthlyOrder.indexOf(b.month));
+        const calFiltered = calamityData.filter(d => d.circle === circle).sort((a,b) => monthlyOrder.indexOf(a.month) - monthlyOrder.indexOf(b.month));
+        
+        const months = monthlyOrder.filter(m => opFiltered.some(op => op.month === m));
+        const opSaidi = months.map(m => { let f = opFiltered.find(op => op.month === m); return f ? f.saidi : 0; });
+        const opSaifi = months.map(m => { let f = opFiltered.find(op => op.month === m); return f ? f.saifi : 0; });
+        const calSaidi = months.map(m => { let f = calFiltered.find(ca => ca.month === m); return f ? f.saidi : 0; });
+        const calSaifi = months.map(m => { let f = calFiltered.find(ca => ca.month === m); return f ? f.saifi : 0; });
+        
+        // Destroy old charts
+        if (saidiChart) saidiChart.destroy();
+        if (saifiChart) saifiChart.destroy();
+        
+        // SAIDI chart (line)
+        const ctxSaidi = document.getElementById('saidiChart').getContext('2d');
+        const saidiDatasets = [{
+            label: `Operational SAIDI (min) – ${circle}`,
+            data: opSaidi,
+            borderColor: '#2c7da0',
+            backgroundColor: 'rgba(44,125,160,0.1)',
+            tension: 0.2,
+            fill: true,
+            pointRadius: 4,
+            borderWidth: 2
+        }];
+        if (showCalamities) {
+            saidiDatasets.push({
+                label: `Natural Calamities SAIDI (min) – ${circle}`,
+                data: calSaidi,
+                borderColor: '#e09d32',
+                backgroundColor: 'rgba(224,157,50,0.05)',
+                borderDash: [8, 6],
+                tension: 0.2,
+                fill: false,
+                pointRadius: 3,
+                borderWidth: 2
+            });
+        }
+        saidiChart = new Chart(ctxSaidi, {
+            type: 'line',
+            data: { labels: months, datasets: saidiDatasets },
+            options: { responsive: true, maintainAspectRatio: true }
+        });
+        
+        // SAIFI chart (bar)
+        const ctxSaifi = document.getElementById('saifiChart').getContext('2d');
+        const saifiDatasets = [{
+            label: `Operational SAIFI (freq) – ${circle}`,
+            data: opSaifi,
+            backgroundColor: '#61a5c2',
+            borderRadius: 6
+        }];
+        if (showCalamities) {
+            saifiDatasets.push({
+                label: `Natural Calamities SAIFI – ${circle}`,
+                data: calSaifi,
+                backgroundColor: '#f4a261',
+                borderRadius: 6
+            });
+        }
+        saifiChart = new Chart(ctxSaifi, {
+            type: 'bar',
+            data: { labels: months, datasets: saifiDatasets },
+            options: { responsive: true, maintainAspectRatio: true }
+        });
+        
+        // Update table
+        const tbody = document.querySelector("#dataTable tbody");
+        tbody.innerHTML = "";
+        for (let i = 0; i < months.length; i++) {
+            const m = months[i];
+            const opS = opSaidi[i];
+            const opF = opSaifi[i];
+            const calS = calSaidi[i];
+            const calF = calSaifi[i];
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td>${m}</td>
+                <td style="text-align:right">${opS.toFixed(3)}</td>
+                <td style="text-align:right">${opF.toFixed(4)}</td>
+                <td style="text-align:right">${calS.toFixed(3)}</td>
+                <td style="text-align:right">${calF.toFixed(4)}</td>
+            `;
+            tbody.appendChild(tr);
+        }
+        document.getElementById("dataStatus").innerHTML = `✓ ${circle} | ${showCalamities ? "with calamities" : "operational only"}`;
+    }
+    
+    // Populate circle dropdown
+    function populateCircles() {
+        const circles = [...new Set(operationalData.map(d => d.circle))].sort();
+        const select = document.getElementById("circleSelect");
+        select.innerHTML = "";
+        circles.forEach(c => {
+            const opt = document.createElement("option");
+            opt.value = c;
+            opt.textContent = c;
+            select.appendChild(opt);
+        });
+        if (circles.length) {
+            currentCircle = circles[0];
+            updateDashboard();
+        }
+        select.addEventListener("change", updateDashboard);
+        document.getElementById("showCalamitiesCheckbox").addEventListener("change", updateDashboard);
+    }
+    
+    // File upload handler
+    document.getElementById("csvUpload").addEventListener("change", function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+            try {
+                const { operational, calamities } = parseFullCSV(evt.target.result);
+                if (operational.length === 0) throw new Error("No operational data found");
+                operationalData = operational;
+                calamityData = calamities;
+                
+                document.getElementById("filtersPanel").style.display = "block";
+                document.getElementById("dashboardContent").style.display = "block";
+                populateCircles();
+            } catch (err) {
+                alert("Parsing error: " + err.message + "\n\nMake sure you uploaded the correct TPCODL CSV file.");
+                console.error(err);
+            }
+        };
+        reader.readAsText(file, "UTF-8");
+    });
+</script>
+</body>
+</html>
