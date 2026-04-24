@@ -1,19 +1,53 @@
 <!DOCTYPE html>
 <html>
-<head><title>CSV Load Test</title></head>
+<head><title>CSV Test</title></head>
 <body>
-<h2>CSV Load Test</h2>
-<div id="output"></div>
+<h2>CSV Load Test – TPCODL</h2>
+<pre id="output">Loading...</pre>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script>
-const DATA_FILE_PATH = './your-file.csv';  // change to your actual CSV filename
-fetch(DATA_FILE_PATH)
-  .then(r => r.text())
-  .then(csv => {
-    const result = Papa.parse(csv, { header: false, skipEmptyLines: true });
-    document.getElementById('output').innerHTML = `<pre>First 5 rows:\n${result.data.slice(0,5).map(row => row.join(',')).join('\n')}</pre>`;
+// ⚠️ CHANGE THIS TO YOUR ACTUAL CSV FILE NAME (same as in DATA_FILE_PATH)
+const CSV_FILE = './INTERRUPTION & LOADING DATA - TPCODL INDICES-FY26.csv';  
+
+fetch(CSV_FILE)
+  .then(res => {
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    return res.text();
   })
-  .catch(e => document.getElementById('output').innerHTML = 'Error: ' + e);
+  .then(csvText => {
+    const result = Papa.parse(csvText, { header: false, skipEmptyLines: true });
+    const rows = result.data;
+    let output = `✅ Loaded ${rows.length} rows.\n`;
+    output += `First 10 rows (showing first 6 columns):\n`;
+    for (let i = 0; i < Math.min(10, rows.length); i++) {
+      output += `${i}: ${rows[i].slice(0,6).join(' | ')}\n`;
+    }
+    // Look for "APRIL" header
+    let aprilRow = -1;
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i] && rows[i].some(cell => cell && cell.toString().trim().toUpperCase() === 'APRIL')) {
+        aprilRow = i;
+        break;
+      }
+    }
+    output += `\n🔍 Row containing "APRIL": ${aprilRow}\n`;
+    if (aprilRow !== -1) {
+      output += `Header row: ${rows[aprilRow].slice(0,12).join(', ')}\n`;
+    }
+    // Look for circle names in column index 1 (second column)
+    let sampleCircles = [];
+    for (let i = aprilRow+1; i < Math.min(aprilRow+30, rows.length); i++) {
+      let col1 = rows[i] && rows[i][1] ? rows[i][1].toString().trim() : '';
+      if (col1 && !col1.startsWith('Category') && col1 !== '0' && col1 !== '') {
+        sampleCircles.push(col1);
+      }
+    }
+    output += `\n🔍 Sample circles found (from column 2): ${sampleCircles.slice(0,10).join(', ')}\n`;
+    document.getElementById('output').innerText = output;
+  })
+  .catch(err => {
+    document.getElementById('output').innerText = `❌ ERROR: ${err.message}\n\nMake sure:\n1. The file '${CSV_FILE}' exists in the same folder as test.html\n2. Filename is case-sensitive\n3. You have waited 1 minute after upload`;
+  });
 </script>
 </body>
 </html>
